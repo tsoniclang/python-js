@@ -1,4 +1,4 @@
-"""JavaScript equality algorithms claimed by PJS-1."""
+"""JavaScript equality algorithms for the closed runtime."""
 
 from tsonic_python_js.numbers import is_nan, is_negative_zero
 from tsonic_python_js.values import undefined
@@ -11,7 +11,7 @@ def _same_numeric_value(left: object, right: object) -> bool:
 
 
 def strict_equal(left: object, right: object) -> bool:
-    """Implement JavaScript strict equality for PJS-1 supported values."""
+    """Implement JavaScript strict equality for supported runtime values."""
 
     from tsonic_python_js.dynamic import JsValue
 
@@ -33,7 +33,7 @@ def strict_equal(left: object, right: object) -> bool:
 
 
 def same_value_zero(left: object, right: object) -> bool:
-    """Implement SameValueZero for PJS-1 supported values."""
+    """Implement SameValueZero for supported runtime values."""
 
     if is_nan(left) and is_nan(right):
         return True
@@ -41,7 +41,7 @@ def same_value_zero(left: object, right: object) -> bool:
 
 
 def object_is(left: object, right: object) -> bool:
-    """Implement Object.is for PJS-1 supported values."""
+    """Implement Object.is for supported runtime values."""
 
     if is_nan(left) and is_nan(right):
         return True

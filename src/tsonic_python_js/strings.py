@@ -93,7 +93,7 @@ def last_index_of(value: str, search: str, position: int | None = None) -> int:
     start = len(units) if position is None else min(max(position, 0), len(units))
     if not needle:
         return start
-    for index in range(start - len(needle), -1, -1):
+    for index in range(min(start, len(units) - len(needle)), -1, -1):
         if units[index : index + len(needle)] == needle:
             return index
     return -1

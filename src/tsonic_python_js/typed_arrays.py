@@ -7,6 +7,17 @@ from typing import ClassVar
 
 from tsonic_python_js.errors import JsRangeError
 
+_SIGNED_LIMITS = {
+    "b": (-128, 127, 8),
+    "h": (-32768, 32767, 16),
+    "i": (-2147483648, 2147483647, 32),
+}
+_UNSIGNED_LIMITS = {
+    "B": (0, 255, 8),
+    "H": (0, 65535, 16),
+    "I": (0, 4294967295, 32),
+}
+
 
 class ArrayBuffer:
     __slots__ = ("bytes",)
@@ -44,37 +55,37 @@ class DataView:
         return int(self._unpack("b", byte_offset, False))
 
     def set_int8(self, byte_offset: int, value: int) -> None:
-        self._pack("b", byte_offset, value, False)
+        self._pack("b", byte_offset, _coerce_integer(value, "b"), False)
 
     def get_uint8(self, byte_offset: int) -> int:
         return int(self._unpack("B", byte_offset, False))
 
     def set_uint8(self, byte_offset: int, value: int) -> None:
-        self._pack("B", byte_offset, value, False)
+        self._pack("B", byte_offset, _coerce_integer(value, "B"), False)
 
     def get_int16(self, byte_offset: int, little_endian: bool = False) -> int:
         return int(self._unpack("h", byte_offset, little_endian))
 
     def set_int16(self, byte_offset: int, value: int, little_endian: bool = False) -> None:
-        self._pack("h", byte_offset, value, little_endian)
+        self._pack("h", byte_offset, _coerce_integer(value, "h"), little_endian)
 
     def get_uint16(self, byte_offset: int, little_endian: bool = False) -> int:
         return int(self._unpack("H", byte_offset, little_endian))
 
     def set_uint16(self, byte_offset: int, value: int, little_endian: bool = False) -> None:
-        self._pack("H", byte_offset, value, little_endian)
+        self._pack("H", byte_offset, _coerce_integer(value, "H"), little_endian)
 
     def get_int32(self, byte_offset: int, little_endian: bool = False) -> int:
         return int(self._unpack("i", byte_offset, little_endian))
 
     def set_int32(self, byte_offset: int, value: int, little_endian: bool = False) -> None:
-        self._pack("i", byte_offset, value, little_endian)
+        self._pack("i", byte_offset, _coerce_integer(value, "i"), little_endian)
 
     def get_uint32(self, byte_offset: int, little_endian: bool = False) -> int:
         return int(self._unpack("I", byte_offset, little_endian))
 
     def set_uint32(self, byte_offset: int, value: int, little_endian: bool = False) -> None:
-        self._pack("I", byte_offset, value, little_endian)
+        self._pack("I", byte_offset, _coerce_integer(value, "I"), little_endian)
 
     def get_float32(self, byte_offset: int, little_endian: bool = False) -> float:
         return self._unpack("f", byte_offset, little_endian)
@@ -167,7 +178,7 @@ class TypedArray:
             if math.isnan(number):
                 return 0
             return min(max(round(number), 0), 255)
-        return number if self.float_kind else int(number)
+        return number if self.float_kind else _coerce_integer(value, self.format_code)
 
     def _fmt(self) -> str:
         return "=" + self.format_code
@@ -238,3 +249,20 @@ def _bounds(start: int, length: int, end: int | None) -> tuple[int, int]:
 def _check_range(buffer: ArrayBuffer, byte_offset: int, byte_length: int) -> None:
     if byte_offset < 0 or byte_length < 0 or byte_offset + byte_length > buffer.byte_length:
         raise JsRangeError("view out of bounds")
+
+
+def _coerce_integer(value: object, format_code: str) -> int:
+    if not isinstance(value, int | float) or isinstance(value, bool):
+        raise JsRangeError("typed array value must be numeric")
+    number = float(value)
+    if not math.isfinite(number) or number == 0:
+        integer = 0
+    else:
+        integer = int(math.copysign(math.floor(abs(number)), number))
+    if format_code in _UNSIGNED_LIMITS:
+        _minimum, _maximum, bits = _UNSIGNED_LIMITS[format_code]
+        return integer % 2**bits
+    minimum, _maximum, bits = _SIGNED_LIMITS[format_code]
+    unsigned = integer % 2**bits
+    sign_bit = 2 ** (bits - 1)
+    return unsigned - 2**bits if unsigned >= sign_bit else max(unsigned, minimum)

@@ -1,4 +1,4 @@
-"""Number helpers needed by PJS-1 runtime semantics."""
+"""Number helpers for JavaScript runtime semantics."""
 
 import math
 

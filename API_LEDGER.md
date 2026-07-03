@@ -19,5 +19,5 @@ or unexported lanes.
 | Date | `JsDate` | implemented UTC epoch-ms subset | C# `DateTests.cs`, Rust `date_tests.rs` |
 | Typed arrays | `ArrayBuffer`, `DataView`, `TypedArray`, concrete typed arrays | implemented practical set | C# `TypedArrayTests.cs`, Rust `typed_array_tests.rs`/`array_buffer_tests.rs` |
 | RegExp | `REGEXP_STATUS`, `unsupported_regexp` | hard-reject with reason | C#/Rust RegExp tests require a proven engine/subset; Python `re` is not used |
-| WeakMap/WeakSet | none | deferred: GC/lifetime semantics unclaimed | C# weak collection tests remain outside python-js export |
+| WeakMap/WeakSet | none | unsupported: GC/lifetime semantics unclaimed | C# weak collection tests remain outside python-js export |
 | Timers/console/fetch/DOM/Node/Web | none | hard-reject: outside runtime boundary | starter spec runtime boundary |

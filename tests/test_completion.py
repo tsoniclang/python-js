@@ -103,7 +103,7 @@ def test_completed_array_methods_preserve_holes() -> None:
     source.set(3, 4)
     assert source.shift() is undefined
     assert source.unshift(0) == 4
-    assert source.keys() == [0, 1, 3]
+    assert source.keys() == [0, 1, 2, 3]
     assert source.values() == [0, 2, undefined, 4]
     assert source.entries()[2] == (2, undefined)
     assert source.slice().concat(JsArray(["x"])).get(4) == "x"
@@ -138,12 +138,22 @@ def test_completed_array_methods_preserve_holes() -> None:
         JsArray().reduce(lambda acc, value, _index, _array: acc)
 
 
+def test_array_keys_yield_all_indexes_including_holes() -> None:
+    from tsonic_python_js import JsArray
+
+    assert JsArray.with_length(2).keys() == [0, 1]
+    sparse = JsArray.with_length(3)
+    sparse.set(1, "present")
+    assert sparse.keys() == [0, 1, 2]
+
+
 def test_string_completion_helpers() -> None:
     assert string_slice("javascript", -3) == "ipt"
     assert substring("abc", 2, 0) == "ab"
     assert substr("javascript", -6, 3) == "scr"
     assert index_of("hello", "l") == 2
     assert last_index_of("banana", "ana") == 3
+    assert last_index_of("abc", "c", 2) == 2
     assert includes("hello", "ell")
     assert starts_with("hello", "he")
     assert ends_with("hello", "lo")
@@ -249,6 +259,24 @@ def test_typed_arrays_views_copies_bounds_and_errors() -> None:
     copied.set(0, 7)
     assert u8.values() == [1, 9, 3, 4]
     assert Uint8ClampedArray([-1, 2.6, 300, float("nan")]).values() == [0, 3, 255, 0]
+    assert Uint8Array([-1, 256]).values() == [255, 0]
+    assert Int8Array([255, 128]).values() == [-1, -128]
+    assert Uint16Array([-1, 65536]).values() == [65535, 0]
+    assert Int16Array([65535, 32768]).values() == [-1, -32768]
+    assert Uint32Array([-1, 4294967296]).values() == [4294967295, 0]
+    assert Int32Array([4294967295, 2147483648]).values() == [-1, -2147483648]
+    view.set_uint8(0, -1)
+    assert view.get_uint8(0) == 255
+    view.set_int8(1, 255)
+    assert view.get_int8(1) == -1
+    view.set_uint16(2, -1)
+    assert view.get_uint16(2) == 65535
+    view.set_int16(2, 65535)
+    assert view.get_int16(2) == -1
+    view.set_uint32(0, -1)
+    assert view.get_uint32(0) == 4294967295
+    view.set_int32(0, 4294967295)
+    assert view.get_int32(0) == -1
     assert Int16Array([1]).values() == [1]
     assert Uint16Array([1]).values() == [1]
     assert Int32Array([1]).values() == [1]

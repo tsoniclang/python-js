@@ -211,7 +211,7 @@ class JsArray:
         return self.join(",")
 
     def keys(self) -> list[int]:
-        return [index for index, value in enumerate(self._slots) if value is not _HOLE]
+        return list(range(self.length))
 
     def values(self) -> list[object]:
         return [undefined if value is _HOLE else value for value in self._slots]
