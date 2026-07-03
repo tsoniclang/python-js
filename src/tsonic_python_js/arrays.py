@@ -1,7 +1,7 @@
 """Sparse JavaScript array carrier."""
 
 import math
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from typing import Final
 
 from tsonic_python_js.equality import same_value_zero, strict_equal
@@ -113,6 +113,16 @@ class JsArray:
         value = self._slots.pop()
         return undefined if value is _HOLE else value
 
+    def shift(self) -> object:
+        if not self._slots:
+            return undefined
+        value = self._slots.pop(0)
+        return undefined if value is _HOLE else value
+
+    def unshift(self, *values: object) -> int:
+        self._slots[0:0] = list(values)
+        return self.length
+
     def at(self, index: int) -> object:
         normalized = self.length + index if index < 0 else index
         return self.get(normalized)
@@ -140,6 +150,129 @@ class JsArray:
                 result.set(source_index - from_index, self._slots[source_index])
         return result
 
+    def concat(self, *items: object) -> "JsArray":
+        result = self.slice()
+        for item in items:
+            if isinstance(item, JsArray):
+                offset = result.length
+                result.set_length(offset + item.length)
+                for index, value in item.present_items():
+                    result.set(offset + index, value)
+            else:
+                result.push(item)
+        return result
+
+    def fill(self, value: object, start: int = 0, end: int | None = None) -> "JsArray":
+        from_index, to_index = js_slice_indices(self.length, start, end)
+        for index in range(from_index, to_index):
+            self._slots[index] = value
+        return self
+
+    def copy_within(self, target: int, start: int = 0, end: int | None = None) -> "JsArray":
+        to_index = _relative_index(target, self.length)
+        from_index, final_index = js_slice_indices(self.length, start, end)
+        count = min(final_index - from_index, self.length - to_index)
+        copied = self._slots[from_index : from_index + count]
+        for offset, value in enumerate(copied):
+            self._slots[to_index + offset] = value
+        return self
+
+    def reverse(self) -> "JsArray":
+        self._slots.reverse()
+        return self
+
+    def splice(self, start: int, delete_count: int | None = None, *items: object) -> "JsArray":
+        actual_start = _relative_index(start, self.length)
+        actual_delete_count = (
+            self.length - actual_start
+            if delete_count is None
+            else min(max(delete_count, 0), self.length - actual_start)
+        )
+        removed_slots = self._slots[actual_start : actual_start + actual_delete_count]
+        removed = JsArray.with_length(len(removed_slots))
+        for index, value in enumerate(removed_slots):
+            if value is not _HOLE:
+                removed.set(index, value)
+        self._slots[actual_start : actual_start + actual_delete_count] = list(items)
+        return removed
+
+    def join(self, separator: str = ",") -> str:
+        parts: list[str] = []
+        for slot in self._slots:
+            if slot is _HOLE or slot is undefined or slot is None:
+                parts.append("")
+            elif isinstance(slot, bool):
+                parts.append("true" if slot else "false")
+            else:
+                parts.append(str(slot))
+        return separator.join(parts)
+
+    def to_string(self) -> str:
+        return self.join(",")
+
+    def keys(self) -> list[int]:
+        return [index for index, value in enumerate(self._slots) if value is not _HOLE]
+
+    def values(self) -> list[object]:
+        return [undefined if value is _HOLE else value for value in self._slots]
+
+    def entries(self) -> list[tuple[int, object]]:
+        return [
+            (index, undefined if value is _HOLE else value)
+            for index, value in enumerate(self._slots)
+        ]
+
+    def map(self, callback: Callable[[object, int, "JsArray"], object]) -> "JsArray":
+        result = JsArray.with_length(self.length)
+        for index, value in self.present_items():
+            result.set(index, callback(value, index, self))
+        return result
+
+    def filter(self, callback: Callable[[object, int, "JsArray"], bool]) -> "JsArray":
+        result = JsArray()
+        for index, value in self.present_items():
+            if callback(value, index, self):
+                result.push(value)
+        return result
+
+    def reduce(
+        self,
+        callback: Callable[[object, object, int, "JsArray"], object],
+        initial_value: object = undefined,
+    ) -> object:
+        items = list(self.present_items())
+        if initial_value is undefined:
+            if not items:
+                raise JsRangeError("reduce of empty array with no initial value")
+            _, accumulator = items.pop(0)
+        else:
+            accumulator = initial_value
+        for index, value in items:
+            accumulator = callback(accumulator, value, index, self)
+        return accumulator
+
+    def some(self, callback: Callable[[object, int, "JsArray"], bool]) -> bool:
+        return any(callback(value, index, self) for index, value in self.present_items())
+
+    def every(self, callback: Callable[[object, int, "JsArray"], bool]) -> bool:
+        return all(callback(value, index, self) for index, value in self.present_items())
+
+    def find(self, callback: Callable[[object, int, "JsArray"], bool]) -> object:
+        for index, value in self.present_items():
+            if callback(value, index, self):
+                return value
+        return undefined
+
+    def find_index(self, callback: Callable[[object, int, "JsArray"], bool]) -> int:
+        for index, value in self.present_items():
+            if callback(value, index, self):
+                return index
+        return -1
+
+    def for_each(self, callback: Callable[[object, int, "JsArray"], object]) -> None:
+        for index, value in self.present_items():
+            callback(value, index, self)
+
     def present_items(self) -> tuple[tuple[int, object], ...]:
         return tuple(
             (index, value) for index, value in enumerate(self._slots) if value is not _HOLE
@@ -154,3 +287,9 @@ class JsArray:
         if from_index >= 0:
             return from_index
         return max(self.length + from_index, 0)
+
+
+def _relative_index(index: int, length: int) -> int:
+    if index < 0:
+        return max(length + index, 0)
+    return min(index, length)

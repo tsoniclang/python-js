@@ -13,6 +13,12 @@ def _same_numeric_value(left: object, right: object) -> bool:
 def strict_equal(left: object, right: object) -> bool:
     """Implement JavaScript strict equality for PJS-1 supported values."""
 
+    from tsonic_python_js.dynamic import JsValue
+
+    if isinstance(left, JsValue):
+        left = left.payload
+    if isinstance(right, JsValue):
+        right = right.payload
     if left is undefined or right is undefined:
         return left is undefined and right is undefined
     if left is None or right is None:
