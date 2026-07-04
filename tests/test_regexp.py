@@ -185,3 +185,46 @@ def test_multiline_anchors_and_ignore_case_matching() -> None:
     assert JsRegExp("[a-z]+", "i").test("HELLO")
     assert JsRegExp("\u03c3", "i").test("\u03c2")  # sigma folds onto final sigma
     assert not JsRegExp("s", "i").test("\u017f")  # long s is ASCII-guarded in non-u mode
+
+
+def test_global_test_consumes_last_index_like_js() -> None:
+    regexp = JsRegExp("a", "g")
+    assert regexp.last_index == 0
+    assert regexp.test("a")
+    assert regexp.last_index == 1
+    assert not regexp.test("a")  # reviewer repro: second call fails and resets
+    assert regexp.last_index == 0
+    assert regexp.test("a")
+
+
+def test_global_test_resets_when_last_index_exceeds_length() -> None:
+    regexp = JsRegExp("a", "g")
+    regexp.last_index = 10
+    assert not regexp.test("aaa")
+    assert regexp.last_index == 0
+    regexp.last_index = -1  # negative clamps to 0 per ToLength
+    assert regexp.test("abc")
+    assert regexp.last_index == 1
+
+
+def test_non_g_operations_leave_last_index_untouched() -> None:
+    regexp = JsRegExp("a")
+    regexp.last_index = 5
+    assert regexp.test("aaa")
+    assert regexp.last_index == 5
+    assert regexp.replace("aaa", "x") == "xaa"
+    assert regexp.last_index == 5
+    assert JsRegExp(",").split("a,b") == ["a", "b"]
+
+
+def test_search_preserves_last_index_and_replace_g_resets_it() -> None:
+    regexp = JsRegExp("a", "g")
+    regexp.last_index = 2
+    assert regexp.search("abc") == 0
+    assert regexp.last_index == 2
+    assert regexp.replace("aaa", "x") == "xxx"
+    assert regexp.last_index == 0
+    splitter = JsRegExp(",", "g")
+    splitter.last_index = 2
+    assert splitter.split("a,b") == ["a", "b"]
+    assert splitter.last_index == 2

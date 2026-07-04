@@ -20,6 +20,10 @@ Matching operates on UTF-16 code units exactly like a non-``u``-flag JS
 RegExp: ``.`` consumes one code unit (astral characters are two), indexes
 returned by ``search`` are code-unit indexes, empty matches advance by one
 code unit, and ``i`` uses the ECMAScript Canonicalize simple case folding.
+``JsRegExp.last_index`` mirrors the observable JS ``lastIndex`` state:
+``test`` on a ``g`` regexp resumes from it and updates it, ``replace`` with
+``g`` leaves it at 0, and ``search``/``split``/non-``g`` operations leave it
+untouched.
 Acceptance of the supported subset is proven against Node's engine by the
 committed vectors in ``tests/oracle/regexp-vectors.json``.
 """
@@ -950,6 +954,12 @@ class JsRegExp:
     Construction parses `pattern`/`flags` and rejects everything outside the
     subset; the compiled object exposes `test`, `search`, `replace` and
     `split` with JS UTF-16 code-unit semantics.
+
+    The mutable `last_index` attribute mirrors JS `lastIndex` observably:
+    `test` on a `g` regexp starts at `last_index`, sets it to the match end
+    on success and resets it to 0 on failure (including `last_index` beyond
+    the input); non-`g` `test`, `search` and `split` leave it untouched;
+    `replace` on a `g` regexp always leaves it at 0.
     """
 
     def __init__(self, pattern: str, flags: str = "") -> None:
@@ -958,18 +968,37 @@ class JsRegExp:
         ast = parser.parse()
         self.source = pattern
         self.flags = flags
+        self.last_index: int = 0
         self._ignore_case = parsed_flags.ignore_case
         self._global = parsed_flags.is_global
         self._multiline = parsed_flags.multiline
         self._program = _compile(ast, parser.group_count)
 
     def test(self, text: str) -> bool:
-        """Mirror `RegExp.prototype.test` (stateless: no `lastIndex`)."""
+        """Mirror `RegExp.prototype.test`, including `lastIndex` on `g`.
 
-        return self._find_from(utf16_code_units(text), 0) is not None
+        Non-`g` regexps always match from the start and never touch
+        `last_index`. `g` regexps start at `last_index` (negative values
+        clamp to 0 per ToLength), advance it to the match end on success,
+        and reset it to 0 on failure.
+        """
+
+        units = utf16_code_units(text)
+        if not self._global:
+            return self._find_from(units, 0) is not None
+        caps = self._find_from(units, max(self.last_index, 0))
+        if caps is None:
+            self.last_index = 0
+            return False
+        self.last_index = _bounds(caps)[1]
+        return True
 
     def search(self, text: str) -> int:
-        """Mirror `String.prototype.search`: code-unit index of the match or -1."""
+        """Mirror `String.prototype.search`: code-unit index of the match or -1.
+
+        Always searches from the start and preserves `last_index` across the
+        call (the spec saves and restores `lastIndex`).
+        """
 
         caps = self._find_from(utf16_code_units(text), 0)
         if caps is None:
@@ -981,7 +1010,9 @@ class JsRegExp:
 
         Replaces the first match, or every match when the `g` flag is set.
         Supports the substitution tokens `$$`, `$&`, `` $` ``, `$'` and
-        `$1`..`$99`.
+        `$1`..`$99`. With `g` the whole input is scanned regardless of
+        `last_index` and `last_index` is left at 0 afterwards (as JS
+        `Symbol.replace` does); without `g`, `last_index` is untouched.
         """
 
         units = utf16_code_units(text)
@@ -1000,6 +1031,8 @@ class JsRegExp:
             if not self._global:
                 break
             search_from = end + 1 if end == start else end
+        if self._global:
+            self.last_index = 0
         out.extend(units[last:])
         return _units_to_str(out)
 
@@ -1008,6 +1041,8 @@ class JsRegExp:
 
         Patterns with capturing groups are rejected because JS splices capture
         values into the result; use a non-capturing group `(?:...)` instead.
+        `last_index` is never touched (JS `Symbol.split` works on a fresh
+        sticky copy of the regexp).
         """
 
         if self._program.group_count > 0:

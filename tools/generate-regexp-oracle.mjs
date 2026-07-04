@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 // Generates tests/oracle/regexp-vectors.json by running every vector through
 // Node's own RegExp implementation. Each entry records
-// {pattern, flags, input, op, replacement?, limit?, expected} where op is one
-// of "test" | "replace" | "split" | "search".
+// {pattern, flags, input, op, replacement?, limit?, calls?, setLastIndex?,
+//  expected, lastIndexAfter} where op is one of
+// "test" | "replace" | "split" | "search" | "testSequence".
+//
+// Every vector pins the regexp object's lastIndex after the operation
+// ("lastIndexAfter"; an array of per-call values for "testSequence").
+// "setLastIndex" seeds lastIndex before the operation runs.
 //
 // Constraints kept in sync with the Python engine subset
 // (src/tsonic_python_js/regexp.py):
@@ -23,6 +28,17 @@ const split = (pattern, flags, input, limit) =>
   cases.push({ pattern, flags, input, op: "split", ...(limit === undefined ? {} : { limit }) });
 const replace = (pattern, flags, input, replacement) =>
   cases.push({ pattern, flags, input, op: "replace", replacement });
+const testSeq = (pattern, flags, input, calls) =>
+  cases.push({ pattern, flags, input, op: "testSequence", calls });
+const seeded = (entry, setLastIndex) => cases.push({ ...entry, setLastIndex });
+const testAt = (pattern, flags, input, setLastIndex) =>
+  seeded({ pattern, flags, input, op: "test" }, setLastIndex);
+const searchAt = (pattern, flags, input, setLastIndex) =>
+  seeded({ pattern, flags, input, op: "search" }, setLastIndex);
+const splitAt = (pattern, flags, input, setLastIndex) =>
+  seeded({ pattern, flags, input, op: "split" }, setLastIndex);
+const replaceAt = (pattern, flags, input, replacement, setLastIndex) =>
+  seeded({ pattern, flags, input, op: "replace", replacement }, setLastIndex);
 
 // --- literals, dot, escapes -------------------------------------------------
 test("abc", "", "xxabcxx");
@@ -271,9 +287,37 @@ split("", "", "\u{1f600}");
 split("\u{1f600}", "", "a\u{1f600}b");
 split("x*", "", "a\u{1f600}b");
 
+// --- lastIndex state (g-flag test statefulness and friends) ----------------------
+testSeq("a", "g", "a", 3); // reviewer repro: true, false, true
+testSeq("a", "g", "aaa", 5); // exhaustion and wraparound
+testSeq("\\d+", "g", "a12 b34", 4);
+testSeq("a", "", "aaa", 3); // non-g test never touches lastIndex
+testSeq("a*", "g", "aa", 3); // test does no empty-match advancement
+testSeq("^a", "gm", "a\na", 4);
+testSeq("\\ude00", "g", "\u{1f600}\u{1f600}", 3); // code-unit lastIndex steps
+testSeq("q", "g", "abc", 2);
+testAt("a", "g", "aaa", 10); // lastIndex beyond length resets to 0
+testAt("a", "g", "aaa", 3);
+testAt("a", "g", "bba", 1); // resume mid-string
+testAt("a", "g", "abc", -1); // negative clamps to 0 per ToLength
+testAt("a", "", "aaa", 5); // non-g test leaves a seeded lastIndex alone
+testAt("q", "", "abc", 5);
+searchAt("a", "g", "abc", 2); // search saves and restores lastIndex
+searchAt("a", "", "abc", 2);
+searchAt("q", "g", "abc", 2);
+replaceAt("a", "g", "aaa", "x", 2); // Symbol.replace with g leaves lastIndex 0
+replaceAt("q", "g", "aaa", "x", 2);
+replaceAt("a", "", "aaa", "x", 2); // non-g replace leaves lastIndex alone
+splitAt(",", "", "a,b", 2); // Symbol.split works on a fresh sticky copy
+splitAt(",", "g", "a,b", 2);
+
 const results = cases.map((entry) => {
   const re = new RegExp(entry.pattern, entry.flags);
+  if (entry.setLastIndex !== undefined) {
+    re.lastIndex = entry.setLastIndex;
+  }
   let expected;
+  let lastIndexAfter;
   switch (entry.op) {
     case "test":
       expected = re.test(entry.input);
@@ -287,10 +331,21 @@ const results = cases.map((entry) => {
     case "replace":
       expected = entry.input.replace(re, entry.replacement);
       break;
+    case "testSequence":
+      expected = [];
+      lastIndexAfter = [];
+      for (let call = 0; call < entry.calls; call += 1) {
+        expected.push(re.test(entry.input));
+        lastIndexAfter.push(re.lastIndex);
+      }
+      break;
     default:
       throw new Error(`unknown op ${entry.op}`);
   }
-  return { ...entry, expected };
+  if (lastIndexAfter === undefined) {
+    lastIndexAfter = re.lastIndex;
+  }
+  return { ...entry, expected, lastIndexAfter };
 });
 
 const here = dirname(fileURLToPath(import.meta.url));
