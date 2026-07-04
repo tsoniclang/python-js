@@ -28,11 +28,18 @@ APIs.
   accessors covered by tests.
 - Typed arrays: `ArrayBuffer`, `DataView`, and Int8/Uint8/Uint8Clamped/Int16/
   Uint16/Int32/Uint32/Float32/Float64 typed arrays.
+- RegExp: `JsRegExp` implements `test`/`replace`/`split`/`search` over a closed
+  syntax subset (literals, `.`, character classes, class escapes, greedy
+  quantifiers, anchors, alternation, groups, flags `i g m`) with JS UTF-16
+  code-unit and `lastIndex` semantics, proven against committed Node oracle
+  vectors. Patterns outside the subset raise at construction;
+  `unsupported_regexp`/`REGEXP_STATUS` name the rejected catalog.
 
 ## Unsupported API Areas
 
-- RegExp is a hard reject. `unsupported_regexp` raises `JsUnsupportedError` and
-  `REGEXP_STATUS` records the reason.
+- RegExp constructs outside the `JsRegExp` subset (lazy quantifiers,
+  backreferences, lookaround, named groups, `\b`/`\B`, `\p{...}`, flags other
+  than `i g m`) raise `JsUnsupportedError` at construction.
 - WeakMap/WeakSet, timers, console, fetch, DOM/Web APIs, Node APIs, prototype
   mutation, proxies, symbols, callback replacer/reviver, and custom `toJSON`
   are unclaimed.

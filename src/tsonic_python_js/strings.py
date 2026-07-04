@@ -1,8 +1,18 @@
-"""UTF-16 string helpers for JavaScript compatibility."""
+"""UTF-16 string helpers for JavaScript compatibility.
+
+Case conversion notes: ``to_upper_case``/``to_lower_case`` use Python's
+``str.upper()``/``str.lower()`` — the Unicode default full case mappings,
+including the conditional Final_Sigma rule — mirroring the Rust runtime's use
+of its standard-library default mappings. No locale-sensitive variants are
+offered. Divergence from a JS engine is limited to Unicode-version skew
+between CPython's bundled tables and the engine's; unpaired surrogate code
+units have no case mapping and pass through unchanged in both.
+"""
 
 import math
 
 from tsonic_python_js.errors import JsRangeError
+from tsonic_python_js.values import undefined
 
 
 def utf16_code_units(value: str) -> tuple[int, ...]:
@@ -35,6 +45,19 @@ def char_at(value: str, index: int) -> str:
     return _from_code_units((units[index],))
 
 
+def at(value: str, index: int) -> object:
+    """Return JS String.prototype.at: one code unit, negative from the end.
+
+    Returns the undefined sentinel when the normalized index is out of range.
+    """
+
+    units = utf16_code_units(value)
+    normalized = len(units) + index if index < 0 else index
+    if normalized < 0 or normalized >= len(units):
+        return undefined
+    return _from_code_units((units[normalized],))
+
+
 def char_code_at(value: str, index: int) -> float:
     """Return JS charCodeAt, using NaN for out-of-range indexes."""
 
@@ -42,6 +65,20 @@ def char_code_at(value: str, index: int) -> float:
     if index < 0 or index >= len(units):
         return math.nan
     return float(units[index])
+
+
+def code_point_at(value: str, index: int) -> object:
+    """Return JS codePointAt: combines surrogate pairs, undefined out of range."""
+
+    units = utf16_code_units(value)
+    if index < 0 or index >= len(units):
+        return undefined
+    first = units[index]
+    if 0xD800 <= first <= 0xDBFF and index + 1 < len(units):
+        second = units[index + 1]
+        if 0xDC00 <= second <= 0xDFFF:
+            return float(((first - 0xD800) << 10) + (second - 0xDC00) + 0x10000)
+    return float(first)
 
 
 def js_slice_indices(length: int, start: int = 0, end: int | None = None) -> tuple[int, int]:
@@ -113,6 +150,72 @@ def ends_with(value: str, search: str, end_position: int | None = None) -> bool:
     needle_len = utf16_len(search)
     start = end - needle_len
     return start >= 0 and string_slice(value, start, end) == search
+
+
+def concat(value: str, *parts: str) -> str:
+    """Return JS String.prototype.concat over already-string arguments."""
+
+    return "".join((value, *parts))
+
+
+def replace(value: str, search: str, replacement: str) -> str:
+    """Replace the first occurrence of a literal search string, JS-style.
+
+    No pattern semantics. The replacement honors the JS GetSubstitution
+    tokens defined for a string search with no capture groups: ``$$``
+    (literal ``$``), ``$&`` (the matched text), dollar-backtick (text before
+    the match), and ``$'`` (text after the match). Any other ``$`` sequence
+    stays literal, exactly as in JS string replace.
+    """
+
+    units = utf16_code_units(value)
+    needle = utf16_code_units(search)
+    index = index_of(value, search)
+    if index == -1:
+        return value
+    before = _from_code_units(units[:index])
+    after = _from_code_units(units[index + len(needle) :])
+    return before + _expand_replacement(replacement, search, before, after) + after
+
+
+def _expand_replacement(replacement: str, matched: str, before: str, after: str) -> str:
+    parts: list[str] = []
+    position = 0
+    while position < len(replacement):
+        char = replacement[position]
+        if char == "$" and position + 1 < len(replacement):
+            token = replacement[position + 1]
+            if token == "$":
+                parts.append("$")
+                position += 2
+                continue
+            if token == "&":
+                parts.append(matched)
+                position += 2
+                continue
+            if token == "`":
+                parts.append(before)
+                position += 2
+                continue
+            if token == "'":
+                parts.append(after)
+                position += 2
+                continue
+        parts.append(char)
+        position += 1
+    return "".join(parts)
+
+
+def to_upper_case(value: str) -> str:
+    """Return the Unicode default (non-locale) full uppercase mapping."""
+
+    return value.upper()
+
+
+def to_lower_case(value: str) -> str:
+    """Return the Unicode default (non-locale) full lowercase mapping."""
+
+    return value.lower()
 
 
 _JS_TRIM_CHARS = "".join(

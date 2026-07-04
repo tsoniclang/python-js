@@ -26,6 +26,30 @@ def test_index_write_extends_with_holes_and_preserves_present_undefined() -> Non
     assert array.present_items() == ((1, undefined), (2, "c"))
 
 
+def test_sparse_growth_and_negative_at_match_rust_js_array_expectations() -> None:
+    values = JsArray([1.0, 2.0, 3.0])
+    values.set_length(5)
+    assert values.length == 5
+    assert values.at(0) == 1.0
+    assert values.at(-1) is undefined
+    assert values.at(-5) == 1.0
+    assert values.at(-3) == 3.0
+    assert values.at(5) is undefined
+    assert values.at(-6) is undefined
+    values.set(4, 9.0)
+    assert values.at(-1) == 9.0
+
+    grown = JsArray([1, 2])
+    assert grown.set(6, "x") == 7
+    assert grown.length == 7
+    assert not grown.has_index(3)
+    assert grown.get(3) is undefined
+    assert grown.delete(3)
+    assert grown.length == 7
+    with raises(JsRangeError):
+        grown.set(-1, "y")
+
+
 def test_delete_creates_hole_without_changing_length() -> None:
     array = JsArray([1, 0, 3])
     assert array.delete(1)
