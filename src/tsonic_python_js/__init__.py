@@ -193,3 +193,10 @@ __all__ += [
     "to_lower_case",
     "to_upper_case",
 ]
+
+# RegExp lane: oracle-backed engine for the closed JS subset (see regexp.py).
+from tsonic_python_js.regexp import JsRegExp  # noqa: E402
+
+__all__ += [
+    "JsRegExp",
+]
