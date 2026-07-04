@@ -2,8 +2,8 @@
 
 import math
 import struct
-from collections.abc import Iterable
-from typing import ClassVar
+from collections.abc import Iterable, Sequence
+from typing import ClassVar, cast
 
 from tsonic_python_js.errors import JsRangeError
 
@@ -151,9 +151,36 @@ class TypedArray:
         self._check_index(index)
         return struct.unpack_from(self._fmt(), self.buffer.bytes, self._offset(index))[0]
 
-    def set(self, index: int, value: object) -> None:
-        self._check_index(index)
-        struct.pack_into(self._fmt(), self.buffer.bytes, self._offset(index), self._coerce(value))
+    def set(self, target: object, value: object = 0) -> None:
+        """Write one element (index, value) or a whole source (source, offset).
+
+        The two-argument element write keeps its existing contract. When the
+        first argument is another typed array or a list of numbers, this is
+        the JS ``TypedArray.prototype.set(source, offset)`` bulk write: each
+        element goes through this class's conversion (wrapping or clamping),
+        and a source that does not fit at the offset raises JsRangeError
+        before any element is written.
+        """
+
+        if isinstance(target, TypedArray):
+            self._set_from_source(target.values(), value)
+            return
+        if isinstance(target, list):
+            self._set_from_source(cast("list[object]", target), value)
+            return
+        if isinstance(target, bool) or not isinstance(target, int):
+            raise JsRangeError("typed array index must be an integer")
+        self._check_index(target)
+        struct.pack_into(self._fmt(), self.buffer.bytes, self._offset(target), self._coerce(value))
+
+    def _set_from_source(self, items: Sequence[object], offset: object) -> None:
+        if isinstance(offset, bool) or not isinstance(offset, int):
+            raise JsRangeError("invalid typed array offset")
+        if offset < 0 or offset + len(items) > self.length:
+            raise JsRangeError("typed array set source out of bounds")
+        converted = [self._coerce(item) for item in items]
+        for index, item in enumerate(converted):
+            struct.pack_into(self._fmt(), self.buffer.bytes, self._offset(offset + index), item)
 
     def values(self) -> list[int | float]:
         return [self.get(index) for index in range(self.length)]
