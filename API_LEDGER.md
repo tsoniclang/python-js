@@ -5,7 +5,7 @@ or unexported lanes.
 
 | Area | Public symbols | Status | Parity references |
 | --- | --- | --- | --- |
-| Values | `undefined`, `is_undefined`, `is_nullish` | implemented | starter spec undefined/null catalog |
+| Values | `undefined`, `is_undefined`, `is_nullish` | implemented | JS undefined/null semantics catalog |
 | Errors | `JsError`, `JsTypeError`, `JsRangeError`, `JsSyntaxError`, `JsReferenceError`, `JsURIError`, `JsUnsupportedError` | implemented | C# `ErrorTests.cs`, `RangeErrorTests.cs` |
 | Equality | `strict_equal`, `same_value_zero`, `object_is` | implemented | Rust `equality_tests.rs`, C# sparse search tests |
 | Objects | `JsObject`, `property_key`, `get_property`, `set_property`, `delete_property` | implemented over the closed carrier set (`JsObject`, `JsArray`, read-only `str`) with write/delete round-trip tests | C# `ObjectTests.cs`, Rust `object_tests.rs` behavior subset |
@@ -18,6 +18,6 @@ or unexported lanes.
 | Collections | `JsMap`, `JsSet` | implemented | C# `MapTests.cs`/`SetTests.cs`, Rust `map_tests.rs`/`set_tests.rs` |
 | Date | `JsDate`, `date_now`, `date_parse` | implemented UTC epoch-ms subset; `date_parse` covers the closed ISO-8601 UTC subset of Rust `date.rs` and returns NaN on failure | C# `DateTests.cs`, Rust `date_tests.rs` |
 | Typed arrays | `ArrayBuffer`, `DataView`, `TypedArray`, concrete typed arrays | implemented practical set, including JS bulk `set(source, offset)` with per-class wrap/clamp conversion and RangeError on out-of-bounds | C# `TypedArrayTests.cs`, Rust `typed_array_tests.rs`/`array_buffer_tests.rs` |
-| RegExp | `JsRegExp`, `REGEXP_STATUS`, `unsupported_regexp` | implemented oracle-backed subset: literals, `.`, classes with ranges/negation, `\d \D \w \W \s \S`, identity/control/hex escapes, greedy `* + ? {n} {n,} {n,m}`, `^ $`, alternation, `( )`/`(?: )`, flags `i g m`; operations `test`/`replace`/`split`/`search` with UTF-16 code-unit semantics; construction rejects lazy quantifiers, backreferences, lookaround, named groups, `\b`/`\B`, `\p{...}`, `\c`, legacy octal, bare braces, and every flag outside `i g m`; `split` rejects capturing groups; Python `re` is not used | Node oracle `tests/oracle/regexp-vectors.json` via `tools/generate-regexp-oracle.mjs`; Rust `tsonic_rust_js` regexp subset |
+| RegExp | `JsRegExp`, `REGEXP_STATUS`, `unsupported_regexp` | implemented oracle-backed subset: literals, `.`, classes with ranges/negation, `\d \D \w \W \s \S`, identity/control/hex escapes, greedy `* + ? {n} {n,} {n,m}`, `^ $`, alternation, `( )`/`(?: )`, flags `i g m`; operations `test`/`replace`/`split`/`search` with UTF-16 code-unit semantics and observable JS `lastIndex` state via `last_index` (`g` `test` resumes/advances/resets, `g` `replace` ends at 0, `search`/`split`/non-`g` leave it untouched); construction rejects lazy quantifiers, backreferences, lookaround, named groups, `\b`/`\B`, `\p{...}`, `\c`, legacy octal, bare braces, and every flag outside `i g m`; `split` rejects capturing groups; Python `re` is not used | Node oracle `tests/oracle/regexp-vectors.json` via `tools/generate-regexp-oracle.mjs`; Rust `tsonic_rust_js` regexp subset |
 | WeakMap/WeakSet | none | unsupported: GC/lifetime semantics unclaimed | C# weak collection tests remain outside python-js export |
-| Timers/console/fetch/DOM/Node/Web | none | hard-reject: outside runtime boundary | starter spec runtime boundary |
+| Timers/console/fetch/DOM/Node/Web | none | hard-reject: outside runtime boundary | runtime boundary policy (README Runtime Boundary) |
