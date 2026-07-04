@@ -170,3 +170,26 @@ __all__ = [
     "utf16_code_units",
     "utf16_len",
 ]
+
+# Non-RegExp JS parity closure lane: string, Date-static, and case helpers.
+from tsonic_python_js.dates import date_now, date_parse
+from tsonic_python_js.strings import (
+    at,
+    code_point_at,
+    concat,
+    replace,
+    to_lower_case,
+    to_upper_case,
+)
+
+__all__: list[str]
+__all__ += [
+    "at",
+    "code_point_at",
+    "concat",
+    "date_now",
+    "date_parse",
+    "replace",
+    "to_lower_case",
+    "to_upper_case",
+]
